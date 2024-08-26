@@ -40,9 +40,6 @@ testem.log
 # System files
 .DS_Store
 Thumbs.db
-<<<<<<< Updated upstream
-=======
 
 # Customs
 src/app/keys.ts
->>>>>>> Stashed changes
