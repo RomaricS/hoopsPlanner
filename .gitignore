@@ -42,5 +42,4 @@ testem.log
 Thumbs.db
 
 # Customs
-/src/keys.ts
 src/app/keys.ts
