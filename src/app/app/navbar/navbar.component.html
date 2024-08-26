@@ -1,0 +1,29 @@
+        <!-- Right Section -->
+        <div class="right-section">
+          <div class="nav">
+              <button id="menu-btn" (click)="toggleMenu.emit()">
+                  <span class="material-icons-sharp">
+                      menu
+                  </span>
+              </button>
+              <div class="dark-mode">
+                  <span class="material-icons-sharp active" (click)="toggleDark()" onkeypress="">
+                      light_mode
+                  </span>
+                  <span class="material-icons-sharp" (click)="toggleDark()" onkeypress="">
+                      dark_mode
+                  </span>
+              </div>
+
+              <div class="profile">
+                  <div class="info">
+                      <p>Hey, <b>Reza</b></p>
+                      <small class="text-muted">Admin</small>
+                  </div>
+                  <div class="profile-photo">
+                      User
+                  </div>
+              </div>
+
+          </div>
+          <!-- End of Nav -->

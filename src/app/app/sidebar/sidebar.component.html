@@ -1,0 +1,66 @@
+        <!-- Sidebar Section -->
+        <aside [ngStyle]="{display: showSidebar() ? 'block' : 'none'}">
+          <div class="toggle">
+              <div class="logo">
+                  <h2>Hoops<span class="danger">Prog</span></h2>
+              </div>
+              <div class="close" id="close-btn" (click)="toggleMenu.emit()" onkeypress="">
+                  <span class="material-icons-sharp">
+                      close
+                  </span>
+              </div>
+          </div>
+
+          <div class="sidebar">
+              <a href="#">
+                  <span class="material-icons-sharp">
+                      dashboard
+                  </span>
+                  <h3>Home</h3>
+              </a>
+              <a href="#">
+                  <span class="material-icons-sharp">
+                      person_outline
+                  </span>
+                  <h3>Players</h3>
+              </a>
+              <a href="#">
+                  <span class="material-icons-sharp">
+                      receipt_long
+                  </span>
+                  <h3>History</h3>
+              </a>
+              <a href="#" class="active">
+                  <span class="material-icons-sharp">
+                      insights
+                  </span>
+                  <h3>Analytics</h3>
+              </a>
+              <a href="#">
+                  <span class="material-icons-sharp">
+                      mail_outline
+                  </span>
+                  <h3>Notifications</h3>
+                  <span class="message-count">27</span>
+              </a>
+              <a href="#">
+                  <span class="material-icons-sharp">
+                      event
+                  </span>
+                  <h3>Next session</h3>
+              </a>
+              <a href="#">
+                  <span class="material-icons-sharp">
+                      settings
+                  </span>
+                  <h3>Settings</h3>
+              </a>
+              <a (click)="logoutFn()" href="#" onkeydown="">
+                  <span class="material-icons-sharp">
+                      logout
+                  </span>
+                  <h3>Logout</h3>
+                </a>
+          </div>
+      </aside>
+      <!-- End of Sidebar Section -->
