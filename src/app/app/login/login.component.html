@@ -1,0 +1,85 @@
+<form
+  class="flex flex-col w-full h-full pb-6 text-center bg-white rounded-3xl"
+  [formGroup]="loginForm"
+  (ngSubmit)="login()"
+>
+  <h3 class="mb-3 text-4xl font-extrabold text-dark-grey-900">Sign In</h3>
+
+  <p class="mb-4 text-grey-700">Enter your email and password</p>
+  <button
+    (click)="byGoogle()"
+    class="flex items-center justify-center w-full py-4 mb-6 text-sm font-medium transition duration-300 rounded-2xl text-grey-900 bg-grey-300 hover:bg-grey-400 focus:ring-4 focus:ring-grey-300"
+  >
+    <img
+      class="h-5 mr-2"
+      src="https://raw.githubusercontent.com/Loopple/loopple-public-assets/main/motion-tailwind/img/logos/logo-google.png"
+      alt="google icon"
+    />
+    Sign in with Google
+  </button>
+  <div class="flex items-center mb-3">
+    <hr class="h-0 border-b border-solid border-grey-500 grow" />
+    <p class="mx-4 text-grey-600">or</p>
+    <hr class="h-0 border-b border-solid border-grey-500 grow" />
+  </div>
+  <div class="text-start mb-7">
+    <label for="email" class="mb-2 text-sm text-start text-grey-900"
+      >Email*</label
+    >
+    <input
+      id="email"
+      type="email"
+      placeholder="mail@mail.com"
+      formControlName="email"
+      class="flex items-center w-full px-5 py-4 mr-2 text-sm font-medium outline-none focus:bg-grey-400 placeholder:text-grey-700 bg-grey-200 text-dark-grey-900 rounded-2xl"
+    />
+    @if (loginForm.controls.email.invalid && loginForm.controls.email.touched) {
+    <p class="text-red-900 text-xs ml-1">A valid email is required</p>
+    }
+  </div>
+
+  <div class="text-start mb-5">
+    <label for="password" class="mb-2 text-sm text-start text-grey-900"
+      >Password*</label
+    >
+    <input
+      id="password"
+      type="password"
+      placeholder="Enter a password"
+      formControlName="password"
+      class="flex items-center w-full px-5 py-4 mr-2 text-sm font-medium outline-none focus:bg-grey-400 placeholder:text-grey-700 bg-grey-200 text-dark-grey-900 rounded-2xl"
+    />
+    @if (loginForm.controls.password.invalid &&
+    loginForm.controls.password.touched) {
+    <p class="text-red-900 text-xs ml-1">
+      Enter a valid password, min 10 characters
+    </p>
+    }
+  </div>
+
+  <div class="flex flex-row mb-8 justify-end">
+    <a
+      href="javascript:void(0)"
+      class="text-sm font-medium text-purple-blue-500 place-self-end"
+      >Forget password?</a
+    >
+  </div>
+  <button
+    type="submit"
+    [disabled]="!loginForm.valid"
+    [ngClass]="{
+      'hover:bg-purple-blue-600 focus:ring-4 focus:ring-purple-blue-100 bg-purple-blue-500':
+        loginForm.valid,
+      'bg-gray-300': !loginForm.valid
+    }"
+    class="w-full px-6 py-5 mb-5 text-sm font-bold leading-none text-white transition duration-300 md:w-96 rounded-2xl"
+  >
+    Sign In
+  </button>
+  <p class="text-sm leading-relaxed text-grey-900">
+    Not registered yet?
+    <a routerLink="/register" class="font-bold text-grey-700"
+      >Create an Account</a
+    >
+  </p>
+</form>
