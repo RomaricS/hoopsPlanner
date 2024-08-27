@@ -1,10 +1,11 @@
 import { NgStyle } from '@angular/common';
 import { Component, input, output } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-sidebar',
   standalone: true,
-  imports: [NgStyle],
+  imports: [NgStyle, RouterLink],
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.scss'
 })
@@ -13,9 +14,4 @@ export class SidebarComponent {
 
   toggleMenu = output();
   logout = output();
-
-  logoutFn(): boolean {
-    this.logout.emit();
-    return false;
-  }
 }

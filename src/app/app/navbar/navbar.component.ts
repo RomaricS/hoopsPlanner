@@ -1,4 +1,5 @@
-import { Component, output } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
+import { AuthService } from '../services/auth.service';
 
 @Component({
   selector: 'app-navbar',
@@ -9,6 +10,10 @@ import { Component, output } from '@angular/core';
 })
 export class NavbarComponent {
   toggleMenu = output();
+
+  private authService = inject(AuthService);
+
+  username = this.authService.currentUserSig()?.username ?? 'Admin';
 
   toggleDark() {
     const darkMode = document.querySelector('.dark-mode');
