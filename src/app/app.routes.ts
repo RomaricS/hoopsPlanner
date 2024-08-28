@@ -3,10 +3,12 @@ import { AuthenticationComponent } from './app/authentication/authentication.com
 import { RegisterComponent } from './app/register/register.component';
 import { HomeComponent } from './app/home/home.component';
 import { AuthGuard } from './app/guards/auth-guard';
+import { CreateEventComponent } from './app/create-event/create-event.component';
 
 export const routes: Routes = [
   { path: 'home', component: HomeComponent, canActivate: [AuthGuard] },
   { path: 'logout', component: HomeComponent, canActivate: [AuthGuard] },
+  { path: 'create', component: CreateEventComponent, canActivate: [AuthGuard] },
   { path: 'login', component: AuthenticationComponent },
   { path: 'register', component: RegisterComponent },
   { path: '', redirectTo: '/home', pathMatch: 'full' },

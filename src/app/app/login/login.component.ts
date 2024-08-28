@@ -60,7 +60,7 @@ export class LoginComponent {
     this.loginForm.reset();
     this.authService
       .googleAuth()
-      .then(() => {
+      .then(({user}) => {
         this._snackBar.open('Welcome', undefined, {
           duration: 3000,
         });

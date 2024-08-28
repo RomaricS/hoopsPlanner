@@ -1,0 +1,28 @@
+<div class="create-event">
+    <div class="form-item">
+      <mat-form-field>
+        <mat-label>Next session on</mat-label>
+        <input matInput [matDatepicker]="picker" name="picker" [formControl]="eventDate">
+        <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-datepicker touchUi #picker></mat-datepicker>
+      </mat-form-field>
+    </div>
+    <div class="form-item">
+      <mat-form-field>
+        <mat-label>Duration</mat-label>
+        <mat-select [formControl]="duration" name="duration">
+          @for (item of durations; track item) {
+            <mat-option [value]="item.viewValue">{{item.value}}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+    <div class="form-item">
+      <mat-form-field>
+        <mat-label>Starts at</mat-label>
+        <input matInput name="debut" [formControl]="startsAt" placeholder="Rdv à 16h" value="16h">
+      </mat-form-field>
+    </div>
+
+    <button mat-flat-button (click)="save()">Save</button>
+</div>

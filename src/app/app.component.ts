@@ -1,11 +1,11 @@
 import { Component, inject, OnInit } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
 import { AuthService } from './app/services/auth.service';
+import { HomeComponent } from "./app/home/home.component";
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet],
+  imports: [HomeComponent],
   templateUrl: './app.component.html',
 })
 export class AppComponent implements OnInit {

@@ -1,5 +1,6 @@
 import { NgStyle } from '@angular/common';
 import { Component, input, output } from '@angular/core';
+import { User } from '@angular/fire/auth';
 import { RouterLink } from '@angular/router';
 
 @Component({

@@ -1,4 +1,5 @@
 <div class="container">
   <app-sidebar [showSidebar]="showSidebar()" (toggleMenu)="toggleMenu()"/>
-  <app-navbar (toggleMenu)="toggleMenu()"/>
+  <app-navbar (toggleMenu)="toggleMenu()" [currentUser]="currentUserSig()"/>
+  <router-outlet />
 </div>

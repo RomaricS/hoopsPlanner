@@ -17,11 +17,11 @@
 
               <div class="profile">
                   <div class="info">
-                      <p>Hey, <b>{{ username }}</b></p>
-                      <small class="text-muted">Admin</small>
+                      <p>Hey, <b>{{ currentUser()?.username }}</b></p>
+                      <small class="text-muted">Player</small>
                   </div>
                   <div class="profile-photo">
-                      User
+                    <img src="assets/img/user.png" alt="profile">
                   </div>
               </div>
 
