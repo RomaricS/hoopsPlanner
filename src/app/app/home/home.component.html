@@ -1,5 +1,61 @@
-<div class="container">
-  <app-sidebar [showSidebar]="showSidebar()" (toggleMenu)="toggleMenu()"/>
-  <app-navbar (toggleMenu)="toggleMenu()" [currentUser]="currentUserSig()"/>
-  <router-outlet />
+@defer { @if (upcomingEventSig()[0]) {
+<div class="dashboard">
+  <div class="right-section">
+    <div class="reminders">
+      <div class="header">
+        <h2>Next session</h2>
+      </div>
+
+      <div class="card">
+        <img src="assets/img/bball.jpg" />
+      </div>
+
+      <div class="notification">
+        <div class="icon">
+          <span class="material-icons-sharp"> schedule </span>
+        </div>
+        <div class="content">
+          <div class="info">
+            <h3>Date: {{ formatDate(upcomingEventSig()[0].eventDay) }}</h3>
+            <small class="text_muted">
+              {{ upcomingEventSig()[0].startsAt }}
+            </small>
+            <span> // </span>
+            <small class="text_muted">
+              Duration: {{ upcomingEventSig()[0].duration / 60 }}h
+            </small>
+          </div>
+        </div>
+      </div>
+
+      <div class="notification deactive">
+        <div class="icon">
+          <span class="material-icons-sharp"> euro </span>
+        </div>
+        <div class="content">
+          <div class="info">
+            <h3>Total price: {{ upcomingEventSig()[0].price }}€</h3>
+            <small class="text_muted">
+              Price/pers: {{ currentPrice() }}€
+            </small>
+          </div>
+        </div>
+      </div>
+
+      <app-players-list />
+
+      <div class="notification add-reminder" (click)="addMe(currentUserSig()!, upcomingEventSig()[0])" onkeypress="">
+        <div>
+          <span class="material-icons-sharp"> add </span>
+          <h3>I will be there {{ currentUserSig()?.username }} </h3>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
+} } @loading (after 100ms; minimum 1s) {
+<img
+  alt="loading..."
+  src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/0.16.1/images/loader-large.gif"
+/>
+}

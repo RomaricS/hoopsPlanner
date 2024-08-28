@@ -8,7 +8,7 @@ export interface Event {
   startsAt: string;
   players: string[];
   payments: string[];
-  id?: string;
+  uid?: string;
 };
 
 export enum EventStatus {

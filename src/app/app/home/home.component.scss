@@ -1,0 +1,103 @@
+.dashboard {
+
+  & .card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    margin-top: 1rem;
+    margin-bottom: .75rem;
+    background-color: var(--color-white);
+    padding: 0;
+    border-radius: var(--card-border-radius);
+    box-shadow: var(--box-shadow);
+    cursor: pointer;
+    transition: all 0.3s ease;
+
+    & img {
+      border-radius: var(--card-border-radius);
+      width: 380px;
+      height: 350px;
+    }
+  }
+}
+
+
+.right-section {
+
+  & .reminders {
+    margin-top: 2rem;
+
+    & .notification {
+      background-color: var(--color-white);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.7rem;
+      padding: 1.4rem var(--card-padding);
+      border-radius: var(--border-radius-2);
+      box-shadow: var(--box-shadow);
+      cursor: pointer;
+      transition: all 0.3s ease;
+
+      &:hover {
+        box-shadow: none;
+      }
+
+      & .content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 0;
+        width: 100%;
+      }
+
+      & .icon {
+        padding: 0.6rem;
+        color: var(--color-white);
+        background-color: var(--color-success);
+        border-radius: 20%;
+        display: flex;
+      }
+
+      &.deactive .icon {
+        background-color: var(--color-danger);
+      }
+    }
+
+    & .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.8rem;
+    }
+
+    & .add-reminder {
+      background-color: var(--color-dark);
+      color: var(--color-white);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+
+      & div {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+    }
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .container {
+    width: 100%;
+    grid-template-columns: 1fr;
+    padding: 0 var(--padding-1);
+  }
+
+  .right-section {
+    width: 94%;
+    margin: 0 auto 4rem;
+  }
+}

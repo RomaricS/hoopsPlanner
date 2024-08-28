@@ -11,7 +11,7 @@ import { MatFormFieldModule, MatLabel } from '@angular/material/form-field';
 import { MatSelect } from '@angular/material/select';
 import { MatOption, provideNativeDateAdapter } from '@angular/material/core';
 import { EventDuration, EventStatus, Event, EventPrice } from '../model/event';
-import { AuthService } from '../services/auth.service';
+import { EventsService } from '../services/events.service';
 
 @Component({
   selector: 'app-create-event',
@@ -40,7 +40,7 @@ export class CreateEventComponent {
     { value: '2 hours', viewValue: EventDuration.double },
   ];
 
-  private authService = inject(AuthService);
+  private eventsService = inject(EventsService);
 
   save(): void {
     console.log(this.eventDate.value, this.startsAt.value, this.duration.value);
@@ -58,8 +58,7 @@ export class CreateEventComponent {
       players: [],
       payments: [],
     }
-    console.log(event);
-    this.authService.createEvent(event);
+    this.eventsService.createEvent(event);
   }
 
   private getPrice(duration: EventDuration): EventPrice {
@@ -67,7 +66,6 @@ export class CreateEventComponent {
       case EventDuration.hour: return EventPrice.hour;
       case EventDuration.hourHalf: return EventPrice.hourHalf;
       default: return EventPrice.double;
-
     }
   }
 }

@@ -1,1 +1,7 @@
-<app-home />
+<div class="container">
+  <app-sidebar [showSidebar]="showSidebar()" (toggleMenu)="toggleMenu()"/>
+  <app-navbar (toggleMenu)="toggleMenu()" [currentUser]="currentUserSig()"/>
+  <main>
+    <router-outlet />
+  </main>
+</div>

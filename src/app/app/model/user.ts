@@ -4,4 +4,5 @@ export interface User {
   username: string;
   emailVerified?: boolean;
   photoURL?: string;
+  uid?: string;
 };
