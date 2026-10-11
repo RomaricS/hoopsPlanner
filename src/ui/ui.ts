@@ -565,13 +565,17 @@ export class UI {
        <p style="font-size:12px">Progress saves automatically on this device. Farm art from Kenney's Isometric Miniature Farm (CC0, kenney.nl); everything else is drawn in code.</p>
        <p style="font-size:12px">Heroes are inspired by real historical figures; their in-game stories are short summaries.</p>`,
       `<button class="btn red" data-act="reset">Start over</button><button class="btn" data-act="close">Close</button>`,
-      (act) => {
+      (act, e) => {
         if (act === 'reset') {
-          if (confirm('Erase your village and start again?')) {
-            this.closeModal();
-            game.reset();
-            this.introModal();
-          }
+          // Two taps: the first arms the button, the second erases.
+          const btn = (e.target as HTMLElement).closest('button')!;
+          btn.setAttribute('data-act', 'reset-confirm');
+          btn.textContent = 'Tap again to erase';
+        }
+        if (act === 'reset-confirm') {
+          this.closeModal();
+          game.reset();
+          this.introModal();
         }
       },
     );
