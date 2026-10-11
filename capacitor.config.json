@@ -1,0 +1,8 @@
+{
+  "appId": "com.sankofa.game",
+  "appName": "Sankofa",
+  "webDir": "dist",
+  "backgroundColor": "#1a0f08",
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never" }
+}
