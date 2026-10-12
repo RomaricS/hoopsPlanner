@@ -182,21 +182,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     limits: [0, 1, 2, 2, 3, 3, 4, 4, 5, 5],
     storage: 300,
   },
-  palisade: {
-    id: 'palisade',
-    name: 'Palisade',
-    desc: 'Sharpened stakes that slow raiders down.',
-    category: 'defense',
-    size: 1,
-    hqRequired: 2,
-    maxLevel: 5,
-    cost: { wood: 8 },
-    costGrowth: 1.9,
-    buildTime: 2,
-    timeGrowth: 1.4,
-    hp: 320,
-    limits: [0, 20, 30, 40, 50, 60, 70, 80, 90, 100],
-  },
+
   watchtower: {
     id: 'watchtower',
     name: 'Watchtower',
@@ -298,21 +284,7 @@ export const BUILDINGS: Record<string, BuildingDef> = {
     workers: 2,
     produces: { res: 'food', rate: 12 },
   },
-  stonewall: {
-    id: 'stonewall',
-    name: 'Stone Wall',
-    desc: 'Dry-stone masonry in the style of Great Zimbabwe. Very tough.',
-    category: 'defense',
-    size: 1,
-    hqRequired: 5,
-    maxLevel: 5,
-    cost: { stone: 25 },
-    costGrowth: 1.9,
-    buildTime: 4,
-    timeGrowth: 1.4,
-    hp: 1100,
-    limits: [0, 0, 0, 0, 40, 50, 60, 70, 80, 100],
-  },
+
   goldmine: {
     id: 'goldmine',
     name: 'Gold Mine',
@@ -333,8 +305,8 @@ export const BUILDINGS: Record<string, BuildingDef> = {
 };
 
 export const BUILD_ORDER = [
-  'hut', 'forager', 'well', 'woodcutter', 'quarry', 'granary', 'palisade', 'watchtower',
-  'maize', 'lodge', 'griot', 'smelter', 'kraal', 'stonewall', 'goldmine',
+  'hut', 'forager', 'well', 'woodcutter', 'quarry', 'granary', 'watchtower',
+  'maize', 'lodge', 'griot', 'smelter', 'kraal', 'goldmine',
 ];
 
 export function levelCost(def: BuildingDef, level: number): ResBag {

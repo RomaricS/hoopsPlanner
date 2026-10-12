@@ -1,6 +1,8 @@
 import { fbm, mulberry32 } from './rng';
 import type { NodeKind, NodeState } from './state';
 import { Tile } from './state';
+import { isPlotTile, isRoad } from './layout';
+import { BUILDINGS } from '../data/buildings';
 
 const NODE_AMOUNT: Record<NodeKind, number> = { acacia: 30, baobab: 60, palm: 25, bush: 25, rock: 40 };
 
@@ -21,7 +23,7 @@ export function generateWorld(seed: number, size: number, hearth: { x: number; y
   const water = new Uint8Array(size * size);
 
   // River: meanders along x at roughly y = cy + 14, crossing the whole map.
-  const riverBase = cy + 13 + Math.floor(rnd() * 3);
+  const riverBase = cy + 17 + Math.floor(rnd() * 2);
   const phase = rnd() * Math.PI * 2;
   for (let x = 0; x < size; x++) {
     const center = riverBase + Math.sin(x * 0.18 + phase) * 2.5 + Math.sin(x * 0.07 + phase * 2) * 2;
@@ -30,8 +32,8 @@ export function generateWorld(seed: number, size: number, hearth: { x: number; y
   }
 
   // Pond to the north-west of the hearth.
-  const px = cx - 8 - Math.floor(rnd() * 3);
-  const py = cy - 6 - Math.floor(rnd() * 3);
+  const px = cx - 15 + Math.floor(rnd() * 2);
+  const py = cy - 12 + Math.floor(rnd() * 2);
   for (let y = 0; y < size; y++)
     for (let x = 0; x < size; x++) {
       const d = Math.hypot((x - px) * 0.9, y - py) + (fbm(x * 0.4, y * 0.4, seed + 3) - 0.5) * 1.6;
@@ -41,6 +43,12 @@ export function generateWorld(seed: number, size: number, hearth: { x: number; y
   for (let y = 0; y < size; y++)
     for (let x = 0; x < size; x++) {
       const i = y * size + x;
+      // The village plan stays dry: dirt roads, buildable plots.
+      if (isRoad(x, y)) {
+        terrain[i] = Tile.Dirt;
+        continue;
+      }
+      if (water[i] && isPlotTile(x, y, (t) => BUILDINGS[t].size)) water[i] = 0;
       if (water[i]) {
         terrain[i] = Tile.Water;
         continue;
@@ -71,7 +79,7 @@ export function generateWorld(seed: number, size: number, hearth: { x: number; y
   const nodes: Omit<NodeState, 'uid'>[] = [];
   const taken = new Set<number>();
   const free = (x: number, y: number) =>
-    x >= 1 && y >= 1 && x < size - 1 && y < size - 1 && terrain[y * size + x] !== Tile.Water && !taken.has(y * size + x);
+    x >= 1 && y >= 1 && x < size - 1 && y < size - 1 && terrain[y * size + x] !== Tile.Water && !taken.has(y * size + x) && !isRoad(x, y);
   const inClearing = (x: number, y: number) => Math.max(Math.abs(x - cx + 0.5), Math.abs(y - cy + 0.5)) < 3.5;
   const place = (kind: NodeKind, x: number, y: number) => {
     if (!free(x, y) || inClearing(x, y)) return false;
@@ -82,15 +90,19 @@ export function generateWorld(seed: number, size: number, hearth: { x: number; y
 
   // Starter nodes close to the hearth so the first minutes are about tapping.
   const starters: [NodeKind, number, number][] = [
-    ['acacia', cx + 3, cy - 2],
-    ['acacia', cx - 4, cy + 2],
-    ['acacia', cx + 1, cy + 4],
-    ['bush', cx - 3, cy - 3],
-    ['bush', cx + 4, cy + 2],
-    ['rock', cx - 2, cy + 5],
-    ['rock', cx + 5, cy - 4],
+    ['acacia', cx + 6, cy - 2],
+    ['acacia', cx - 7, cy + 1],
+    ['acacia', cx + 2, cy + 6],
+    ['acacia', cx - 3, cy - 7],
+    ['bush', cx - 6, cy - 5],
+    ['bush', cx + 5, cy + 4],
+    ['rock', cx - 4, cy + 6],
+    ['rock', cx + 6, cy - 6],
+    ['rock', cx + 7, cy + 2],
   ];
-  for (const [k, x, y] of starters) place(k, x, y);
+  // Nudge a starter off the road grid if it lands on one.
+  for (const [k, x, y] of starters)
+    [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1]].some(([dx, dy]) => place(k, x + dx, y + dy));
 
   // Kopjes: clusters of granite boulders.
   for (let k = 0; k < 9; k++) {

@@ -14,7 +14,8 @@ import { RES_IDS, type ResBag, type ResId } from '../data/resources';
 import { dayAt, isNight, seasonAt } from '../data/seasons';
 import { waveReward } from '../data/enemies';
 import { nodeMax } from './worldgen';
-import { MAP_SIZE, Tile, type BuildingState, type GameState, type NodeState } from './state';
+import { MAP_SIZE, type BuildingState, type GameState, type NodeState } from './state';
+import { PLOTS, type Plot } from './layout';
 
 /** Food and water each survivor needs per minute. */
 export const FOOD_PER_POP = 0.6;
@@ -200,45 +201,40 @@ export function nodeAt(state: GameState, x: number, y: number): NodeState | unde
 
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
 
+/** The next empty plot reserved for this building type, if any. */
+export function nextPlot(state: GameState, type: string): Plot | undefined {
+  const n = BUILDINGS[type].size;
+  return PLOTS.find((p) => p.type === type && !footprint(type, p.x, p.y).some(([x, y]) => buildingAt(state, x, y)) && p.x + n <= MAP_SIZE);
+}
+
 export function canBuildType(state: GameState, type: string): PlaceCheck {
   const d = BUILDINGS[type];
   const hq = hqLevel(state);
   if (hq < d.hqRequired) return { ok: false, reason: `Needs Hearth level ${d.hqRequired}` };
   if (countOf(state, type) >= limitAt(d, hq)) return { ok: false, reason: 'Upgrade the Hearth to build more' };
+  const plot = nextPlot(state, type);
+  if (!plot) return { ok: false, reason: 'No free plot left' };
+  if (!footprint(type, plot.x, plot.y).every(([x, y]) => inTerritory(state, x, y))) return { ok: false, reason: 'Upgrade the Hearth to grow your land' };
   if (busyBuilders(state) >= builders(state)) return { ok: false, reason: 'All builders are busy' };
   if (!canAfford(state, levelCost(d, 1))) return { ok: false, reason: 'Not enough resources' };
   return { ok: true };
 }
 
-export function canPlaceAt(state: GameState, type: string, x: number, y: number, ignoreUid?: number): PlaceCheck {
-  for (const [tx, ty] of footprint(type, x, y)) {
-    if (tx < 0 || ty < 0 || tx >= MAP_SIZE || ty >= MAP_SIZE) return { ok: false, reason: 'Out of bounds' };
-    if (!inTerritory(state, tx, ty)) return { ok: false, reason: 'Outside your territory' };
-    if (state.terrain[ty * MAP_SIZE + tx] === Tile.Water) return { ok: false, reason: 'Cannot build on water' };
-    const b = buildingAt(state, tx, ty);
-    if (b && b.uid !== ignoreUid) return { ok: false, reason: 'Space is taken' };
-    const n = nodeAt(state, tx, ty);
-    if (n && n.amount > 0) return { ok: false, reason: 'Clear the tree or rock first' };
-  }
-  return { ok: true };
-}
-
-export function placeBuilding(state: GameState, type: string, x: number, y: number): BuildingState | { ok: false; reason: string } {
+/** Builds on the next free plot for this type. Trees and rocks on the plot are cleared. */
+export function placeBuilding(state: GameState, type: string): BuildingState | { ok: false; reason: string } {
   const can = canBuildType(state, type);
   if (!can.ok) return can;
-  const where = canPlaceAt(state, type, x, y);
-  if (!where.ok) return where;
+  const plot = nextPlot(state, type)!;
   const d = BUILDINGS[type];
   spend(state, levelCost(d, 1));
-  // Depleted stumps under the footprint are cleared for good.
-  const fp = new Set(footprint(type, x, y).map(([a, b]) => `${a},${b}`));
+  const fp = new Set(footprint(type, plot.x, plot.y).map(([a, b]) => `${a},${b}`));
   state.nodes = state.nodes.filter((n) => !fp.has(`${n.x},${n.y}`));
   const total = buildTimeFor(state, d, 1);
   const b: BuildingState = {
     uid: state.nextUid++,
     type,
-    x,
-    y,
+    x: plot.x,
+    y: plot.y,
     level: 0,
     hp: Math.round(levelHp(d, 1) * 0.3),
     workers: 0,
@@ -246,18 +242,6 @@ export function placeBuilding(state: GameState, type: string, x: number, y: numb
   };
   state.buildings.push(b);
   return b;
-}
-
-export function moveBuilding(state: GameState, uid: number, x: number, y: number): PlaceCheck {
-  const b = state.buildings.find((v) => v.uid === uid);
-  if (!b) return { ok: false, reason: 'Missing building' };
-  const where = canPlaceAt(state, b.type, x, y, uid);
-  if (!where.ok) return where;
-  const fp = new Set(footprint(b.type, x, y).map(([a, c]) => `${a},${c}`));
-  state.nodes = state.nodes.filter((n) => !fp.has(`${n.x},${n.y}`));
-  b.x = x;
-  b.y = y;
-  return { ok: true };
 }
 
 export function upgradeCheck(state: GameState, b: BuildingState): PlaceCheck {

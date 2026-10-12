@@ -3,7 +3,6 @@ import type { IconId } from '../art/effects';
 import { BUILD_ORDER, BUILDINGS, defenseAt, housingAt, levelCost, limitAt, workerSlots, type BuildingDef } from '../data/buildings';
 import { ERAS, eraForHq } from '../data/eras';
 import { HEROES, HERO_BY_ID, bonusText, heroStats, heroUpgradeCost } from '../data/heroes';
-import { QUESTS } from '../data/quests';
 import { RES_IDS, RESOURCES, type ResBag, type ResId } from '../data/resources';
 import { dayAt, dayPhase, isNight, seasonAt, SEASONS, type SeasonDef } from '../data/seasons';
 import { game, type OfflineReport } from '../game';
@@ -63,15 +62,22 @@ export class UI {
   private zoom = el('div', 'zoom');
   private panel: HTMLDivElement | null = null;
   private drawer: HTMLDivElement | null = null;
-  private placebar: HTMLDivElement | null = null;
   private modal: HTMLDivElement | null = null;
   private toasts = el('div', 'toasts');
   private raidbar = el('div', 'raidbar');
   private selected: number | null = null;
   private drawerTab = 'all';
-  private questCollapsed = false;
+  private questCollapsed = (() => {
+    try {
+      return localStorage.getItem('sankofa.questCollapsed') !== '0';
+    } catch {
+      return true;
+    }
+  })();
   private resEls = new Map<ResId, { root: HTMLDivElement; num: HTMLElement; rate: HTMLElement; cap: HTMLElement }>();
-  private placing: { mode: string; type: string; ok: boolean } | null = null;
+  private plotType: string | null = null;
+  private questKey = -1;
+  private questPeekUntil = 0;
 
   constructor() {
     root.append(this.top, this.quest, this.actions, this.zoom, this.toasts);
@@ -106,21 +112,24 @@ export class UI {
     };
     this.quest.onclick = () => {
       if (game.questDone()) game.claimQuest();
-      else this.questCollapsed = !this.questCollapsed;
+      else {
+        const open = !this.quest.classList.contains('collapsed');
+        this.questCollapsed = open;
+        this.questPeekUntil = 0;
+        try {
+          localStorage.setItem('sankofa.questCollapsed', open ? '1' : '0');
+        } catch {
+          // Preference only.
+        }
+      }
       this.renderQuest();
     };
     this.clock.onclick = () => this.openSeasonInfo();
 
     game.bus.on('changed', () => this.render());
     game.bus.on('select', (uid: number | null) => this.select(uid));
+    game.bus.on('plot', (type: string) => this.selectPlot(type));
     game.bus.on('toast', (t: string, k: 'info' | 'warn' | 'good') => this.toast(t, k));
-    game.bus.on('mode', (m: string, type?: string) => this.onMode(m, type));
-    game.bus.on('ghost', (ok: boolean) => {
-      if (this.placing) {
-        this.placing.ok = ok;
-        this.renderPlacebar();
-      }
-    });
     game.bus.on('raidWarning', (n: number) => this.banner('Raiders approach!', `Raid ${n} begins at nightfall — get ready`, 'danger'));
     game.bus.on('raidStart', (n: number) => {
       const comp = n % 5 === 0 ? 'A terrible foe leads them…' : 'Defend the village until dawn';
@@ -201,17 +210,22 @@ export class UI {
       this.quest.style.display = 'none';
       return;
     }
+    // A new quest shows its details for a few seconds, then folds away.
+    if (this.questKey !== game.state.quest) {
+      this.questKey = game.state.quest;
+      this.questPeekUntil = performance.now() + 6000;
+    }
     const [cur, target] = q.progress(game.state);
     const done = cur >= target;
+    const open = done || !this.questCollapsed || performance.now() < this.questPeekUntil;
     this.quest.classList.toggle('done', done);
-    this.quest.classList.toggle('collapsed', this.questCollapsed && !done);
+    this.quest.classList.toggle('collapsed', !open);
+    const pct = Math.min(100, (cur / target) * 100);
     setHtml(
       this.quest,
-      `<div class="qbody"><div class="qlabel">${done ? 'Tap to claim' : `Quest ${game.state.quest + 1}/${QUESTS.length}`}</div>
-       <div class="qtitle">${q.title}</div>
-       <div class="qbar"><i style="width:${Math.min(100, (cur / target) * 100)}%"></i></div>
-       <div class="qhint">${Math.floor(Math.min(cur, target))}/${target} · ${q.hint}</div>
-       <div class="qreward">${rewardChips(q.reward)}</div></div>`,
+      `<div class="qbody"><div class="qrow"><span class="qtitle">${q.title}</span><span class="qcount">${Math.floor(Math.min(cur, target))}/${target}</span><span class="qfold">${open ? '▴' : '▾'}</span></div>
+       <div class="qbar"><i style="width:${pct}%"></i></div>
+       ${open ? `<div class="qhint">${done ? '<b>Tap to claim your reward</b>' : q.hint}</div><div class="qreward">${rewardChips(q.reward)}</div>` : ''}</div>`,
     );
   }
 
@@ -230,8 +244,34 @@ export class UI {
 
   // ------------------------------------------------------------ selection
 
+  private selectPlot(type: string) {
+    this.selected = null;
+    this.plotType = type;
+    this.closeDrawer();
+    if (!this.panel) {
+      this.panel = el('div', 'panel');
+      this.panel.onclick = (e) => this.onPanelClick(e);
+      root.append(this.panel);
+    }
+    this.renderPanel();
+  }
+
+  private renderPlotPanel() {
+    const type = this.plotType!;
+    const d = BUILDINGS[type];
+    const can = eco.canBuildType(game.state, type);
+    const hint = !can.ok && can.reason !== 'Not enough resources' ? `<small>${can.reason}</small>` : '';
+    setHtml(
+      this.panel!,
+      `<div class="phead"><h2>Empty plot</h2><span class="lvl">${d.name}</span><button class="close" data-act="close">✕</button></div>
+       <div class="pbody"><div class="pinfo"><div class="desc">${d.desc}</div><div class="stats">${costChips(levelCost(d, 1))}<span class="stat">${ico('clock')} ${fmtTime(eco.buildTimeFor(game.state, d, 1))}</span></div></div>
+       <div class="pact"><button class="btn" data-act="buildplot" ${can.ok ? '' : 'disabled'}>Build${hint}</button></div></div>`,
+    );
+  }
+
   private select(uid: number | null) {
     this.selected = uid;
+    this.plotType = null;
     if (uid === null) {
       this.panel?.remove();
       this.panel = null;
@@ -247,6 +287,7 @@ export class UI {
   }
 
   private renderPanel() {
+    if (this.plotType && this.panel) return this.renderPlotPanel();
     const s = game.state;
     const b = s.buildings.find((x) => x.uid === this.selected);
     if (!b || !this.panel) {
@@ -306,17 +347,25 @@ export class UI {
         : b.type === 'hearth'
           ? `<button class="btn blue" data-act="season">Seasons</button>`
           : '';
-    const move = b.type !== 'hearth' ? `<button class="btn wood" data-act="move">Move</button>` : '';
     setHtml(
       this.panel,
       `<div class="phead"><h2>${d.name}</h2><span class="lvl">${b.level === 0 ? 'Under construction' : `Level ${b.level}`}</span><button class="close" data-act="close">✕</button></div>
        <div class="pbody"><div class="pinfo"><div class="desc">${d.desc}</div><div class="stats">${stats.join('')}</div>${workers}</div>
-       <div class="pact">${actions}<div style="display:flex;gap:6px">${move}${extra}</div></div></div>`,
+       <div class="pact">${actions}<div style="display:flex;gap:6px">${extra}</div></div></div>`,
     );
   }
 
   private onPanelClick(e: MouseEvent) {
     const act = (e.target as HTMLElement).closest('[data-act]')?.getAttribute('data-act');
+    if (this.plotType) {
+      if (act === 'close') this.select(null);
+      if (act === 'buildplot') {
+        const type = this.plotType;
+        this.select(null);
+        game.bus.emit('ui:place', type);
+      }
+      return;
+    }
     const uid = this.selected;
     if (!act || uid === null) return;
     const b = game.state.buildings.find((x) => x.uid === uid);
@@ -337,9 +386,6 @@ export class UI {
       case 'rush':
         game.rush(uid);
         break;
-      case 'move':
-        game.bus.emit('ui:move', uid);
-        break;
       case 'legends':
         this.openLegends();
         break;
@@ -354,7 +400,6 @@ export class UI {
   private openDrawer() {
     if (this.drawer) return this.closeDrawer();
     game.bus.emit('ui:deselect');
-    game.bus.emit('ui:cancel');
     this.drawer = el('div', 'drawer');
     this.drawer.onclick = (e) => {
       const t = e.target as HTMLElement;
@@ -381,7 +426,7 @@ export class UI {
   private closeDrawer() {
     this.drawer?.remove();
     this.drawer = null;
-    if (!this.placing) this.actions.style.display = '';
+    this.actions.style.display = '';
   }
 
   private renderDrawer() {
@@ -419,38 +464,6 @@ export class UI {
   }
 
   // ------------------------------------------------------------ placement
-
-  private onMode(mode: string, type?: string) {
-    this.placebar?.remove();
-    this.placebar = null;
-    if (mode === 'idle') {
-      this.placing = null;
-      this.actions.style.display = '';
-      return;
-    }
-    this.placing = { mode, type: type!, ok: true };
-    this.actions.style.display = 'none';
-    this.placebar = el('div', 'placebar');
-    this.placebar.onclick = (e) => {
-      const act = (e.target as HTMLElement).closest('[data-act]')?.getAttribute('data-act');
-      if (act === 'ok') game.bus.emit('ui:confirm');
-      if (act === 'no') game.bus.emit('ui:cancel');
-    };
-    root.append(this.placebar);
-    this.renderPlacebar();
-  }
-
-  private renderPlacebar() {
-    if (!this.placebar || !this.placing) return;
-    const d = BUILDINGS[this.placing.type];
-    const cost = this.placing.mode === 'place' ? `<div class="stats" style="justify-content:center;margin-top:2px">${costChips(levelCost(d, 1))}</div>` : '';
-    setHtml(
-      this.placebar,
-      `<button class="btn red" data-act="no">✕</button>
-       <div class="phint">${this.placing.mode === 'move' ? 'Move' : 'Place'} ${d.name}<br><small style="opacity:.8">Drag or tap to position</small>${cost}</div>
-       <button class="btn" data-act="ok" ${this.placing.ok ? '' : 'disabled'}>✓</button>`,
-    );
-  }
 
   // ------------------------------------------------------------ modals
 

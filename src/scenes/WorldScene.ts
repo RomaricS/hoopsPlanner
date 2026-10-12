@@ -3,7 +3,7 @@ import { buildingTier, hearthFireOffset } from '../art/buildings';
 import { ART_SCALE } from '../art/paint';
 import { ORIGINS } from '../art/registry';
 import { TILE_VARIANTS } from '../art/nature';
-import { BUILDINGS, defenseAt } from '../data/buildings';
+import { BUILD_ORDER, BUILDINGS, defenseAt, limitAt } from '../data/buildings';
 import { ENEMIES, waveComposition, waveStrength } from '../data/enemies';
 import { HERO_BY_ID, heroStats } from '../data/heroes';
 import { dayAt, dayPhase, isNight, seasonAt, NIGHT_FRACTION, DAY_LENGTH } from '../data/seasons';
@@ -11,6 +11,7 @@ import { game } from '../game';
 import * as eco from '../sim/economy';
 import { HEARTH_POS, MAP_SIZE, Tile, type BuildingState, type NodeState } from '../sim/state';
 import { hash2 } from '../sim/rng';
+import { isPlotTile, isRoad } from '../sim/layout';
 import { depthAt, footprintCenter, tileToWorld, TH, TW, worldToTile } from '../world/iso';
 import { Unit } from '../world/units';
 import type { FxScene } from './FxScene';
@@ -29,9 +30,6 @@ interface BuildingView {
   towerCd: number;
 }
 
-type Mode = { kind: 'idle' } | { kind: 'place'; type: string; x: number; y: number } | { kind: 'move'; uid: number; x: number; y: number };
-
-const WALLS = new Set(['palisade', 'stonewall']);
 const FONT = '"Lilita One", "Trebuchet MS", sans-serif';
 
 export class WorldScene extends Phaser.Scene {
@@ -45,17 +43,17 @@ export class WorldScene extends Phaser.Scene {
   private chief!: Unit;
   private fx!: FxScene;
   private territory!: Phaser.GameObjects.Graphics;
-  private ghost?: { sprite: Phaser.GameObjects.Image; grid: Phaser.GameObjects.Graphics; props: Phaser.GameObjects.Image[] };
+  private plotMarkers = new Map<string, { pad: Phaser.GameObjects.Image; icon: Phaser.GameObjects.Image }>();
   private ring!: Phaser.GameObjects.Image;
-  private mode: Mode = { kind: 'idle' };
   private selected: number | null = null;
   private lastSeasonId = '';
   private lastHq = 0;
   private prodTimer = 0;
+  private markerTimer = 0;
   private raid: { n: number; total: number; queue: { enemy: string; at: number }[]; t: number; strength: number; side: { x: number; y: number } } | null = null;
   private warned = 0;
   // Input.
-  private drag: { x: number; y: number; camX: number; camY: number; moved: boolean; onGhost: boolean } | null = null;
+  private drag: { x: number; y: number; camX: number; camY: number; moved: boolean } | null = null;
   private pinch: { dist: number; zoom: number } | null = null;
   baseZoom = 1;
 
@@ -83,17 +81,13 @@ export class WorldScene extends Phaser.Scene {
     game.bus.on('placed', (b: BuildingState) => this.onPlaced(b));
     game.bus.on('built', (e: { uid: number; level: number }) => this.onBuilt(e.uid, e.level));
     game.bus.on('upgradeStarted', (uid: number) => this.refreshView(uid));
-    game.bus.on('moved', (uid: number) => this.onMoved(uid));
     game.bus.on('removed', (uid: number) => this.removeView(uid));
     game.bus.on('arrived', () => this.syncVillagers());
     game.bus.on('workers', () => this.syncVillagers());
     game.bus.on('regrow', (e: { uid: number }) => this.refreshNode(e.uid));
     game.bus.on('heroSummoned', () => this.syncDefenders());
     game.bus.on('rebuild', () => this.rebuildWorld());
-    game.bus.on('ui:place', (type: string) => this.startPlacement(type));
-    game.bus.on('ui:confirm', () => this.confirmPlacement());
-    game.bus.on('ui:cancel', () => this.cancelMode());
-    game.bus.on('ui:move', (uid: number) => this.startMove(uid));
+    game.bus.on('ui:place', (type: string) => this.buildFromMenu(type));
     game.bus.on('ui:focus', (uid: number) => this.focusBuilding(uid));
     game.bus.on('ui:deselect', () => this.select(null));
     game.bus.on('ui:zoom', (dir: number) => this.zoomBy(dir > 0 ? 1.2 : 1 / 1.2));
@@ -118,7 +112,7 @@ export class WorldScene extends Phaser.Scene {
     for (let y = 1; y < MAP_SIZE - 1; y++)
       for (let x = 1; x < MAP_SIZE - 1; x++) {
         const t = s.terrain[y * MAP_SIZE + x];
-        if (t === Tile.Water) continue;
+        if (t === Tile.Water || isRoad(x, y) || isPlotTile(x, y, (k) => BUILDINGS[k].size)) continue;
         const r = hash2(x * 3 + 1, y * 7 + 2, s.seed + 5);
         let key: string | null = null;
         if (t === Tile.Grass && r < 0.28) key = 'd_tuft';
@@ -211,7 +205,7 @@ export class WorldScene extends Phaser.Scene {
     const o = ORIGINS.get(key)!;
     sprite.setOrigin(o[0], o[1]);
     const n = BUILDINGS[b.type].size;
-    sprite.setDepth(depthAt(b.x + (n - 1) / 2, b.y + (n - 1) / 2) + (WALLS.has(b.type) ? 0 : 1));
+    sprite.setDepth(depthAt(b.x + (n - 1) / 2, b.y + (n - 1) / 2) + 1);
     sprite.setData('building', b.uid);
     const bar = this.add.graphics().setDepth(40000);
     const label = this.add
@@ -289,7 +283,7 @@ export class WorldScene extends Phaser.Scene {
     const c = footprintCenter(b.type, b.x, b.y);
     v.sprite.setPosition(c.x, c.y);
     const n = BUILDINGS[b.type].size;
-    v.sprite.setDepth(depthAt(b.x + (n - 1) / 2, b.y + (n - 1) / 2) + (WALLS.has(b.type) ? 0 : 1));
+    v.sprite.setDepth(depthAt(b.x + (n - 1) / 2, b.y + (n - 1) / 2) + 1);
     if (key !== v.texKey) {
       v.texKey = key;
       v.sprite.setTexture(key);
@@ -356,14 +350,6 @@ export class WorldScene extends Phaser.Scene {
     }
     if (BUILDINGS[b.type].workers || BUILDINGS[b.type].guards) this.syncVillagers();
     if (BUILDINGS[b.type].guards) this.syncDefenders();
-  }
-
-  private onMoved(uid: number) {
-    const b = game.state.buildings.find((x) => x.uid === uid);
-    if (!b) return;
-    for (const [tx, ty] of eco.footprint(b.type, b.x, b.y)) this.decor.get(ty * MAP_SIZE + tx)?.setVisible(false);
-    this.refreshView(uid);
-    if (this.selected === uid) this.select(uid);
   }
 
   private refreshTerritory() {
@@ -749,7 +735,7 @@ export class WorldScene extends Phaser.Scene {
 
   private pickBuildingTarget(e: Unit): BuildingState | null {
     const prefers = ENEMIES[e.id]?.prefers ?? 'any';
-    const alive = game.state.buildings.filter((b) => b.hp > 0 && !WALLS.has(b.type));
+    const alive = game.state.buildings.filter((b) => b.hp > 0);
     if (!alive.length) return null;
     const pref = alive.filter((b) =>
       prefers === 'storage'
@@ -1075,6 +1061,11 @@ export class WorldScene extends Phaser.Scene {
       this.productionFloaters();
     }
     if (this.selected !== null) this.positionRing();
+    this.markerTimer -= dt;
+    if (this.markerTimer <= 0) {
+      this.markerTimer = 0.5;
+      this.refreshPlotMarkers();
+    }
     this.cull();
   }
 
@@ -1220,13 +1211,7 @@ export class WorldScene extends Phaser.Scene {
         return;
       }
       const cam = this.cameras.main;
-      let onGhost = false;
-      if (this.mode.kind !== 'idle') {
-        const t = this.pointerTile(p);
-        const n = BUILDINGS[this.mode.kind === 'place' ? this.mode.type : this.buildingType(this.mode.uid)].size;
-        onGhost = t.x >= this.mode.x - 0.6 && t.y >= this.mode.y - 0.6 && t.x <= this.mode.x + n - 0.4 && t.y <= this.mode.y + n - 0.4;
-      }
-      this.drag = { x: p.x, y: p.y, camX: cam.scrollX, camY: cam.scrollY, moved: false, onGhost };
+      this.drag = { x: p.x, y: p.y, camX: cam.scrollX, camY: cam.scrollY, moved: false };
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (this.pinch) {
@@ -1243,13 +1228,6 @@ export class WorldScene extends Phaser.Scene {
       const dy = p.y - this.drag.y;
       if (!this.drag.moved && Math.hypot(dx, dy) > 10 * this.baseZoom) this.drag.moved = true;
       if (!this.drag.moved) return;
-      if (this.drag.onGhost && this.mode.kind !== 'idle') {
-        const t = this.pointerTile(p);
-        const type = this.mode.kind === 'place' ? this.mode.type : this.buildingType(this.mode.uid);
-        const n = BUILDINGS[type].size;
-        this.setGhost(Math.round(t.x - (n - 1) / 2), Math.round(t.y - (n - 1) / 2));
-        return;
-      }
       const cam = this.cameras.main;
       cam.setScroll(this.drag.camX - dx / cam.zoom, this.drag.camY - dy / cam.zoom);
       this.clampCamera();
@@ -1264,10 +1242,6 @@ export class WorldScene extends Phaser.Scene {
       this.drag = null;
     });
     this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => this.zoomBy(dy > 0 ? 0.9 : 1.1));
-  }
-
-  private buildingType(uid: number) {
-    return game.state.buildings.find((b) => b.uid === uid)?.type ?? 'hut';
   }
 
   private pointerTile(p: Phaser.Input.Pointer) {
@@ -1298,16 +1272,15 @@ export class WorldScene extends Phaser.Scene {
 
   private tap(p: Phaser.Input.Pointer) {
     const t = this.pointerTile(p);
-    if (this.mode.kind !== 'idle') {
-      const type = this.mode.kind === 'place' ? this.mode.type : this.buildingType(this.mode.uid);
-      const n = BUILDINGS[type].size;
-      this.setGhost(Math.round(t.x - (n - 1) / 2), Math.round(t.y - (n - 1) / 2));
-      return;
-    }
     const w = this.cameras.main.getWorldPoint(p.x, p.y);
     const hit = this.pick(w.x, w.y);
     if (hit?.getData('building') !== undefined) {
       this.select(hit.getData('building'));
+      return;
+    }
+    if (hit?.getData('plot') !== undefined) {
+      this.select(null);
+      game.bus.emit('plot', hit.getData('plot'));
       return;
     }
     if (hit?.getData('node') !== undefined) {
@@ -1328,7 +1301,7 @@ export class WorldScene extends Phaser.Scene {
   /** Front-most building or node sprite with an opaque pixel at the world point. */
   private pick(wx: number, wy: number): Phaser.GameObjects.Image | null {
     let best: Phaser.GameObjects.Image | null = null;
-    const candidates = [...[...this.views.values()].map((v) => v.sprite), ...this.nodeSprites.values()];
+    const candidates = [...[...this.views.values()].map((v) => v.sprite), ...this.nodeSprites.values(), ...[...this.plotMarkers.values()].flatMap((m) => [m.pad, m.icon])];
     for (const s of candidates) {
       if (!s.visible) continue;
       const b = s.getBounds();
@@ -1372,120 +1345,40 @@ export class WorldScene extends Phaser.Scene {
     this.select(uid);
   }
 
-  // ------------------------------------------------------------------ placement
+  // ------------------------------------------------------------------ plots
 
-  private startPlacement(type: string) {
-    this.cancelMode();
-    this.select(null);
-    const cam = this.cameras.main;
-    const t = worldToTile(cam.midPoint.x, cam.midPoint.y);
-    const spot = this.findSpot(type, Math.round(t.x), Math.round(t.y));
-    this.mode = { kind: 'place', type, x: spot.x, y: spot.y };
-    this.makeGhost(type);
-    this.setGhost(spot.x, spot.y);
-    game.bus.emit('mode', 'place', type);
+  private buildFromMenu(type: string) {
+    const b = game.place(type);
+    if (b) this.focusBuilding(b.uid);
   }
 
-  private startMove(uid: number) {
-    const b = game.state.buildings.find((x) => x.uid === uid);
-    if (!b) return;
-    this.cancelMode();
-    this.select(null);
-    this.mode = { kind: 'move', uid, x: b.x, y: b.y };
-    this.makeGhost(b.type, b);
-    this.views.get(uid)?.sprite.setAlpha(0.3);
-    this.setGhost(b.x, b.y);
-    game.bus.emit('mode', 'move', b.type);
-  }
-
-  private findSpot(type: string, cx: number, cy: number) {
+  /** Shows a staked marker on the next free plot of every type the player can build now. */
+  private refreshPlotMarkers() {
     const s = game.state;
-    for (let r = 0; r < 14; r++)
-      for (let dy = -r; dy <= r; dy++)
-        for (let dx = -r; dx <= r; dx++) {
-          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-          if (eco.canPlaceAt(s, type, cx + dx, cy + dy).ok) return { x: cx + dx, y: cy + dy };
-        }
-    return { x: cx, y: cy };
-  }
-
-  private makeGhost(type: string, b?: BuildingState) {
-    const key = b ? this.viewTexKey(b) : `b_${type}_0`;
-    const sprite = this.add.image(0, 0, key).setScale(ART_SCALE).setAlpha(0.85).setDepth(30000);
-    const o = ORIGINS.get(key)!;
-    sprite.setOrigin(o[0], o[1]);
-    const grid = this.add.graphics().setDepth(29999);
-    const props: Phaser.GameObjects.Image[] = [];
-    if (type === 'maize')
-      for (let i = 0; i < 4; i++) props.push(this.add.image(0, 0, 'k_cornDouble_N').setScale(ART_SCALE).setAlpha(0.85).setDepth(30000).setOrigin(...ORIGINS.get('k_cornDouble_N')!));
-    this.ghost = { sprite, grid, props };
-  }
-
-  private setGhost(x: number, y: number) {
-    if (!this.ghost || this.mode.kind === 'idle') return;
-    this.mode.x = x;
-    this.mode.y = y;
-    const type = this.mode.kind === 'place' ? this.mode.type : this.buildingType(this.mode.uid);
-    const ignore = this.mode.kind === 'move' ? this.mode.uid : undefined;
-    const ok = eco.canPlaceAt(game.state, type, x, y, ignore).ok;
-    const c = footprintCenter(type, x, y);
-    this.ghost.sprite.setPosition(c.x, c.y).setTint(ok ? 0xffffff : 0xff8a7a);
-    this.ghost.props.forEach((p, i) => {
-      const w = tileToWorld(x + (i % 2), y + Math.floor(i / 2));
-      p.setPosition(w.x, w.y);
-    });
-    const g = this.ghost.grid;
-    g.clear();
-    for (const [tx, ty] of eco.footprint(type, x, y)) {
-      const tok = eco.canPlaceAt(game.state, 'palisade', tx, ty, ignore).ok || (ignore !== undefined && eco.buildingAt(game.state, tx, ty)?.uid === ignore);
-      const w = tileToWorld(tx, ty);
-      g.fillStyle(ok && tok ? 0x7ccf4a : 0xe0503a, 0.45);
-      g.lineStyle(3, ok && tok ? 0xd8ffb0 : 0xffb0a0, 0.9);
-      const pts = [
-        { x: w.x, y: w.y - TH / 2 },
-        { x: w.x + TW / 2, y: w.y },
-        { x: w.x, y: w.y + TH / 2 },
-        { x: w.x - TW / 2, y: w.y },
-      ];
-      g.fillPoints(pts, true);
-      g.strokePoints(pts, true);
-    }
-    game.bus.emit('ghost', ok);
-  }
-
-  private confirmPlacement() {
-    const m = this.mode;
-    if (m.kind === 'place') {
-      const b = game.place(m.type, m.x, m.y);
-      if (!b) return;
-      const isWall = WALLS.has(m.type);
-      this.cancelMode();
-      // Walls chain: keep placing the next segment.
-      if (isWall && eco.canBuildType(game.state, m.type).ok) {
-        this.mode = { kind: 'place', type: m.type, x: m.x, y: m.y };
-        this.makeGhost(m.type);
-        const next = [
-          [1, 0],
-          [0, 1],
-          [-1, 0],
-          [0, -1],
-        ].find(([dx, dy]) => eco.canPlaceAt(game.state, m.type, m.x + dx, m.y + dy).ok) ?? [1, 0];
-        this.setGhost(m.x + next[0], m.y + next[1]);
-        game.bus.emit('mode', 'place', m.type);
+    const want = new Map<string, { type: string; x: number; y: number }>();
+    if (!game.raidActive)
+      for (const type of BUILD_ORDER) {
+        const d = BUILDINGS[type];
+        if (eco.hqLevel(s) < d.hqRequired || eco.countOf(s, type) >= limitAt(d, eco.hqLevel(s))) continue;
+        const p = eco.nextPlot(s, type);
+        if (!p || !eco.footprint(type, p.x, p.y).every(([x, y]) => eco.inTerritory(s, x, y))) continue;
+        want.set(`${p.x},${p.y}`, { type, x: p.x, y: p.y });
       }
-    } else if (m.kind === 'move') {
-      if (game.move(m.uid, m.x, m.y)) this.cancelMode();
+    for (const [k, m] of this.plotMarkers)
+      if (!want.has(k) || m.pad.getData('plot') !== want.get(k)!.type) {
+        m.pad.destroy();
+        m.icon.destroy();
+        this.plotMarkers.delete(k);
+      }
+    for (const [k, p] of want) {
+      if (this.plotMarkers.has(k)) continue;
+      const n = BUILDINGS[p.type].size;
+      const c = footprintCenter(p.type, p.x, p.y);
+      const pad = this.add.image(c.x, c.y, `plot_${n}`).setScale(ART_SCALE).setDepth(450).setData('plot', p.type);
+      const icon = this.add.image(c.x, c.y - 26 * n, 'i_hammer').setScale(0.55).setDepth(depthAt(p.x + n - 1, p.y + n - 1)).setData('plot', p.type);
+      this.tweens.add({ targets: icon, y: icon.y - 10, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      this.plotMarkers.set(k, { pad, icon });
     }
-  }
-
-  cancelMode() {
-    if (this.mode.kind === 'move') this.views.get(this.mode.uid)?.sprite.setAlpha(1);
-    this.mode = { kind: 'idle' };
-    this.ghost?.sprite.destroy();
-    this.ghost?.grid.destroy();
-    this.ghost?.props.forEach((p) => p.destroy());
-    this.ghost = undefined;
-    game.bus.emit('mode', 'idle');
   }
 }
 

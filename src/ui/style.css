@@ -341,26 +341,50 @@ h3 {
   padding: 6px 9px 8px;
 }
 
-.quest .qlabel {
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  opacity: 0.7;
+.quest .qrow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .quest .qtitle {
   font-family: 'Lilita One', sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.15;
+  flex: 1;
+  min-width: 0;
+}
+
+.quest .qcount {
+  font-weight: 900;
+  font-size: 12px;
+}
+
+.quest .qfold {
+  font-size: 12px;
+  opacity: 0.6;
 }
 
 .quest .qhint {
   font-size: 11px;
   line-height: 1.25;
-  margin-top: 3px;
+  margin-top: 4px;
   font-weight: 700;
   opacity: 0.85;
+}
+
+.quest.collapsed {
+  width: 190px;
+  opacity: 0.92;
+}
+
+.quest.collapsed .qbody {
+  padding: 4px 8px 6px;
+}
+
+.quest.collapsed .qbar {
+  height: 6px;
+  margin-top: 3px;
 }
 
 .quest .qbar {
@@ -380,11 +404,6 @@ h3 {
 
 .quest.done {
   animation: glow 1.2s infinite;
-}
-
-.quest.collapsed .qhint,
-.quest.collapsed .qreward {
-  display: none;
 }
 
 @keyframes glow {
@@ -893,36 +912,6 @@ h3 {
   font-size: 13px;
   text-align: center;
   padding: 8px;
-}
-
-/* ------------------------------------------------------------ placement bar */
-
-.placebar {
-  position: absolute;
-  left: 50%;
-  bottom: 14px;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(30, 18, 9, 0.9);
-  border: 2px solid var(--ink);
-  border-radius: 16px;
-  padding: 6px;
-}
-
-.placebar .phint {
-  font-weight: 800;
-  font-size: 13px;
-  padding: 0 6px;
-  max-width: 260px;
-  text-align: center;
-}
-
-.placebar .btn {
-  width: 56px;
-  height: 48px;
-  font-size: 24px;
 }
 
 /* ------------------------------------------------------------ modals */

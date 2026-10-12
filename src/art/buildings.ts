@@ -945,6 +945,27 @@ export function paintBuildings(): TexInfo[] {
     }
   }
   for (const n of [1, 2]) {
+    // Empty plot: pegs and a rope marking the ground.
+    out.push(
+      tex(`plot_${n}`, n, 40, (ctx, ax, ay) => {
+        const e = (n / 2) * 0.86;
+        diamondPath(ctx, ax, ay, e, e);
+        ctx.fillStyle = 'rgba(255,236,170,0.22)';
+        ctx.fill();
+        ctx.setLineDash([14, 10]);
+        ctx.strokeStyle = 'rgba(255,240,190,0.95)';
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        for (const [dx, dy] of [
+          [-e, -e],
+          [e, -e],
+          [e, e],
+          [-e, e],
+        ])
+          stake(ctx, ...pt(ax, ay, dx, dy), 30, 8, '#8b5a2b');
+      }),
+    );
     out.push(
       tex(`construct_${n}`, n, 140 + n * 30, (ctx, ax, ay) => {
         pad(ctx, ax, ay, n, '#a98457');

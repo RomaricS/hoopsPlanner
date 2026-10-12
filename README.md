@@ -33,8 +33,8 @@ To lock the app to landscape, set `android:screenOrientation="sensorLandscape"` 
 ## How to play
 
 - **Tap** trees, bushes and boulders: your chief walks over and gathers wood, food or stone.
-- **Build** opens the build menu. Drag or tap to position, then confirm with ✓. Walls keep chaining so you can draw a line of them.
-- **Tap a building** to see what it does, add or remove workers, upgrade it, or move it.
+- **Build** opens the build menu. Every building has reserved plots in a planned village around the Hearth, so it goes straight onto the next free one. Empty plots you can build on show a hammer marker you can tap.
+- **Tap a building** to see what it does, add or remove workers, or upgrade it.
 - **The Hearth** is your town hall. Upgrading it unlocks buildings, grows your territory, adds builders and opens new ages.
 - **Survivors** arrive while you have free housing plus food and water. New arrivals go to the most vital empty job automatically.
 - **Seasons** last three days each: Long Rains, Harvest Moon, Harmattan, Dry Season. They change crop, water and wood output and raid strength.

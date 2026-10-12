@@ -131,8 +131,8 @@ export class Game {
 
   // ------------------------------------------------------------ actions
 
-  place(type: string, x: number, y: number) {
-    const r = eco.placeBuilding(this.state, type, x, y);
+  place(type: string) {
+    const r = eco.placeBuilding(this.state, type);
     if ('uid' in r) {
       this.bus.emit('placed', r);
       this.changed();
@@ -159,14 +159,6 @@ export class Game {
     eco.setWorkers(this.state, uid, n);
     this.bus.emit('workers', uid);
     this.changed();
-  }
-
-  move(uid: number, x: number, y: number) {
-    const r = eco.moveBuilding(this.state, uid, x, y);
-    if (!r.ok) this.toast(r.reason, 'warn');
-    else this.bus.emit('moved', uid);
-    this.changed();
-    return r.ok;
   }
 
   demolish(uid: number) {

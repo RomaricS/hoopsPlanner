@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BUILDINGS, levelCost } from '../src/data/buildings';
+import { BUILDINGS, levelCost, limitAt } from '../src/data/buildings';
+import { PLOTS } from '../src/sim/layout';
 import { waveComposition } from '../src/data/enemies';
 import { QUESTS } from '../src/data/quests';
 import { HEROES } from '../src/data/heroes';
@@ -41,8 +42,7 @@ describe('building', () => {
   it('spends resources, takes a builder and completes after its build time', () => {
     const s = newGame(1);
     s.res.wood = 100;
-    const spot = findSpot(s, 'hut');
-    const b = eco.placeBuilding(s, 'hut', spot.x, spot.y);
+    const b = eco.placeBuilding(s, 'hut');
     expect('uid' in b).toBe(true);
     expect(s.res.wood).toBe(100 - levelCost(BUILDINGS.hut, 1).wood!);
     expect(eco.busyBuilders(s)).toBe(1);
@@ -52,23 +52,50 @@ describe('building', () => {
     expect(eco.housing(s)).toBe(2 + 3);
   });
 
-  it('refuses invalid placements', () => {
+  it('fills the reserved plots in order and clears trees on them', () => {
     const s = richGame();
-    const h = eco.hearth(s);
-    expect(eco.canPlaceAt(s, 'hut', h.x, h.y).ok).toBe(false);
-    expect(eco.canPlaceAt(s, 'hut', -1, 5).ok).toBe(false);
-    const far = eco.territoryRadius(s) + 3;
-    expect(eco.canPlaceAt(s, 'hut', h.x + far, h.y).ok).toBe(false);
-    const tree = s.nodes.find((n) => n.amount > 0 && eco.inTerritory(s, n.x, n.y))!;
-    expect(eco.canPlaceAt(s, 'hut', tree.x, tree.y).ok).toBe(false);
+    const first = eco.nextPlot(s, 'forager')!;
+    expect(PLOTS.find((p) => p.type === 'forager')).toEqual(first);
+    s.nodes.push({ uid: 5000, kind: 'acacia', x: first.x, y: first.y, amount: 30, max: 30 });
+    const b = eco.placeBuilding(s, 'forager');
+    expect('uid' in b && [b.x, b.y]).toEqual([first.x, first.y]);
+    expect(s.nodes.some((n) => n.uid === 5000)).toBe(false);
+    expect(eco.nextPlot(s, 'forager')).not.toEqual(first);
+  });
+
+  it('has a dry plot for every building the limits allow, none overlapping', () => {
+    const s = newGame(8);
+    const seen = new Set<string>();
+    for (const [type, d] of Object.entries(BUILDINGS)) {
+      if (type === 'hearth') continue;
+      const plots = PLOTS.filter((p) => p.type === type);
+      expect(plots.length, type).toBeGreaterThanOrEqual(Math.max(...d.limits));
+      for (const p of plots)
+        for (const [x, y] of eco.footprint(type, p.x, p.y)) {
+          expect(seen.has(`${x},${y}`)).toBe(false);
+          seen.add(`${x},${y}`);
+          expect(s.terrain[y * MAP_SIZE + x]).not.toBe(Tile.Water);
+        }
+    }
+  });
+
+  it('keeps each unlocked plot inside the territory of the Hearth level that unlocks it', () => {
+    for (let hq = 1; hq <= 10; hq++) {
+      const s = newGame(1);
+      s.buildings[0].level = hq;
+      for (const [type, d] of Object.entries(BUILDINGS)) {
+        if (type === 'hearth' || hq < d.hqRequired) continue;
+        const plots = PLOTS.filter((p) => p.type === type).slice(0, limitAt(d, hq));
+        for (const p of plots) for (const [x, y] of eco.footprint(type, p.x, p.y)) expect(eco.inTerritory(s, x, y), `${type} at hq ${hq}`).toBe(true);
+      }
+    }
   });
 
   it('respects hearth requirements and per-level limits', () => {
     const s = richGame();
     expect(eco.canBuildType(s, 'watchtower').ok).toBe(false);
     for (let i = 0; i < 2; i++) {
-      const p = findSpot(s, 'hut');
-      eco.placeBuilding(s, 'hut', p.x, p.y);
+      eco.placeBuilding(s, 'hut');
       finish(s);
     }
     expect(eco.canBuildType(s, 'hut')).toEqual({ ok: false, reason: 'Upgrade the Hearth to build more' });
@@ -76,8 +103,7 @@ describe('building', () => {
 
   it('caps other buildings at the hearth level', () => {
     const s = richGame();
-    const p = findSpot(s, 'hut');
-    eco.placeBuilding(s, 'hut', p.x, p.y);
+    eco.placeBuilding(s, 'hut');
     finish(s);
     const hut = s.buildings.find((b) => b.type === 'hut')!;
     expect(eco.upgradeCheck(s, hut)).toEqual({ ok: false, reason: 'Upgrade the Hearth first' });
@@ -93,8 +119,7 @@ describe('economy', () => {
     const s = richGame();
     s.res.food = 100;
     s.res.water = 100;
-    const p = findSpot(s, 'forager');
-    eco.placeBuilding(s, 'forager', p.x, p.y);
+    eco.placeBuilding(s, 'forager');
     finish(s);
     s.pop = 3;
     eco.autoAssign(s);
@@ -186,11 +211,3 @@ describe('raids, heroes and quests', () => {
     }
   });
 });
-
-function findSpot(s: ReturnType<typeof newGame>, type: string) {
-  const h = eco.hearth(s);
-  for (let r = 2; r < 10; r++)
-    for (let dy = -r; dy <= r; dy++)
-      for (let dx = -r; dx <= r; dx++) if (eco.canPlaceAt(s, type, h.x + dx, h.y + dy).ok) return { x: h.x + dx, y: h.y + dy };
-  throw new Error('no spot');
-}

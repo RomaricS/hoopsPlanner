@@ -3,7 +3,7 @@ import { BUILDINGS, levelHp } from '../data/buildings';
 import { generateWorld } from './worldgen';
 
 export const MAP_SIZE = 48;
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export enum Tile {
   Grass = 0,
