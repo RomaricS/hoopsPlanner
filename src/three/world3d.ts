@@ -5,6 +5,8 @@ import { MAP_SIZE, Tile, type GameState, type NodeState } from '../sim/state';
 import { model, tinted, type NatureId } from './assets';
 import { Person, type Outfit } from './people';
 import { acacia, buildingModel, baobab, scaffold } from './models';
+import { compoundModel } from './compounds';
+import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import { glowTexture, groundDetailTexture, shadowBlobTexture } from './textures';
 
 /** Tile (x, y) covers world [x, x+1] x [y, y+1] on the XZ plane. */
@@ -14,11 +16,11 @@ export function tileCenter(x: number, y: number) {
 
 /** Savanna palette (sRGB hex), converted to linear for vertex colours. */
 const TILE_HEX: Record<number, string> = {
-  [Tile.Grass]: '#9aa443',
-  [Tile.DryGrass]: '#c7a95a',
-  [Tile.Dirt]: '#b58a5a',
-  [Tile.Sand]: '#d9bd86',
-  [Tile.Water]: '#6f6a44',
+  [Tile.Grass]: '#7fb04a',
+  [Tile.DryGrass]: '#9db450',
+  [Tile.Dirt]: '#d6ae74',
+  [Tile.Sand]: '#e2c78e',
+  [Tile.Water]: '#6f8a54',
 };
 const TILE_RGB: Record<number, [number, number, number]> = Object.fromEntries(
   Object.entries(TILE_HEX).map(([k, v]) => {
@@ -28,6 +30,8 @@ const TILE_RGB: Record<number, [number, number, number]> = Object.fromEntries(
 ) as Record<number, [number, number, number]>;
 
 interface Walker {
+  /** Workers stay at their station instead of wandering. */
+  fixed?: boolean;
   person: Person;
   obj: THREE.Object3D;
   work: string;
@@ -65,6 +69,8 @@ export class World3D {
   private last = performance.now();
   private elapsed = 0;
   private water!: THREE.Mesh;
+  private outline: OutlineEffect;
+  toon = true;
   private viewH = 14;
   phase = 0.3;
 
@@ -77,6 +83,7 @@ export class World3D {
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
+    this.outline = new OutlineEffect(this.renderer, { defaultThickness: 0.0035, defaultColor: [0.12, 0.07, 0.04] });
 
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
     this.scene.add(this.hemi);
@@ -126,14 +133,21 @@ export class World3D {
 
   buildTerrain(state: GameState) {
     const N = MAP_SIZE;
-    const res = 3; // vertices per tile edge
+    const res = 5; // vertices per tile edge
     const seg = N * res;
     const geo = new THREE.PlaneGeometry(N, N, seg, seg);
     geo.rotateX(-Math.PI / 2);
     geo.translate(N / 2, 0, N / 2);
     const pos = geo.attributes.position as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
-    const tileAt = (x: number, y: number) => state.terrain[Math.max(0, Math.min(N - 1, y)) * N + Math.max(0, Math.min(N - 1, x))];
+    const raw = (x: number, y: number) => state.terrain[Math.max(0, Math.min(N - 1, y)) * N + Math.max(0, Math.min(N - 1, x))];
+    // Inside the village plan: green plots and dirt roads, like a tended settlement.
+    const tileAt = (x: number, y: number) => {
+      const t = raw(x, y);
+      if (t === Tile.Water || t === Tile.Sand) return t;
+      if (Math.max(Math.abs(x - 24), Math.abs(y - 24)) <= 11) return Tile.Grass;
+      return t;
+    };
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
@@ -142,8 +156,10 @@ export class World3D {
       const fz = z - 0.5;
       const x0 = Math.floor(fx);
       const z0 = Math.floor(fz);
-      const tx = fx - x0;
-      const tz = fz - z0;
+      // Sharpened blend: crisp road edges, still soft at the very border.
+      const sharpen = (t: number) => THREE.MathUtils.smoothstep(t, 0.3, 0.7);
+      const tx = sharpen(fx - x0);
+      const tz = sharpen(fz - z0);
       let r = 0;
       let g = 0;
       let b = 0;
@@ -167,9 +183,21 @@ export class World3D {
       const patch = fbm(x * 0.07, z * 0.07, state.seed + 21, 3) - 0.5;
       const n = fbm(x * 0.25, z * 0.25, state.seed + 3, 2) - 0.5;
       const v = 1 + n * 0.16 + (hash2(Math.floor(x * 4), Math.floor(z * 4), 5) - 0.5) * 0.04;
-      colors[i * 3] = (r - patch * 0.08) * v;
-      colors[i * 3 + 1] = (g + patch * 0.05) * v;
-      colors[i * 3 + 2] = (b - patch * 0.04) * v;
+      // Narrow dirt paths along the centre of the road grid.
+      const roadDist = (c: number) => {
+        const u = ((((c - 25.5) % 3) + 3) % 3);
+        return Math.min(u, 3 - u);
+      };
+      const inTown = Math.max(Math.abs(x - 24), Math.abs(z - 24)) <= 11.5;
+      const d = inTown ? Math.min(roadDist(x), roadDist(z)) : 9;
+      const pathK = 1 - THREE.MathUtils.smoothstep(d, 0.28, 0.42);
+      const dirt = TILE_RGB[Tile.Dirt];
+      r = r + (dirt[0] - r) * pathK;
+      g = g + (dirt[1] - g) * pathK;
+      b = b + (dirt[2] - b) * pathK;
+      colors[i * 3] = (r - patch * 0.08 * (1 - pathK)) * v;
+      colors[i * 3 + 1] = (g + patch * 0.05 * (1 - pathK)) * v;
+      colors[i * 3 + 2] = (b - patch * 0.04 * (1 - pathK)) * v;
       // Gentle relief outside the village; water beds dip.
       const fromCenter = Math.hypot(x - 24, z - 24);
       const hill = fromCenter > 12 ? (fbm(x * 0.08, z * 0.08, state.seed + 9, 3) - 0.45) * Math.min(1, (fromCenter - 12) / 6) * 1.2 : 0;
@@ -181,6 +209,7 @@ export class World3D {
     detail.repeat.set(N / 2, N / 2);
     const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, map: detail, roughness: 1 }));
     ground.receiveShadow = true;
+    ground.userData.noOutline = true;
     this.scene.add(ground);
 
     // Earth skirt so the map reads as a slab.
@@ -196,6 +225,8 @@ export class World3D {
       wg,
       new THREE.MeshStandardMaterial({ color: 0x3c8fbf, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.85 }),
     );
+    (this.water.material as THREE.Material).userData.outlineParameters = { visible: false };
+    (skirt.material as THREE.Material).userData.outlineParameters = { visible: false };
     this.scene.add(this.water);
 
     // Grass tufts scattered on grassy tiles, instanced.
@@ -229,6 +260,7 @@ export class World3D {
       const im = new THREE.InstancedMesh(tm.geometry, mat, spots.length);
       spots.forEach((m, i) => im.setMatrixAt(i, m));
       im.receiveShadow = true;
+      im.userData.noOutline = true;
       this.scene.add(im);
     }
   }
@@ -266,12 +298,45 @@ export class World3D {
 
   // ------------------------------------------------------------------ buildings
 
+  /** A cutaway compound with villagers working at its stations. */
+  addCompound(type: string, x: number, y: number, level: number, dress: (i: number, tool?: string) => Outfit) {
+    const n = BUILDINGS[type].size;
+    const tier = level >= 7 ? 2 : level >= 4 ? 1 : 0;
+    const c = compoundModel(type, tier);
+    c.group.position.set(x + n / 2, 0, y + n / 2);
+    this.scene.add(c.group);
+    this.hookFire(c.group);
+    c.stations.forEach((st, i) => {
+      const o = dress(i, st.tool);
+      const pos = new THREE.Vector3(x + n / 2 + st.x, st.y ?? 0.03, y + n / 2 + st.z);
+      this.addWorker(o, pos, st.face, st.anim);
+    });
+    return c.group;
+  }
+
+  addWorker(outfit: Outfit, pos: THREE.Vector3, face: number, anim: string) {
+    const person = new Person(outfit);
+    person.obj.position.copy(pos);
+    person.obj.rotation.y = face;
+    person.play(anim, 0);
+    person.mixer.setTime(Math.random() * 3);
+    this.scene.add(person.obj);
+    this.walkers.push({ fixed: true, person, obj: person.obj, work: anim, pos: pos.clone(), dest: null, wait: 0, home: pos, radius: 0, speed: 0 });
+  }
+
   addBuilding(type: string, x: number, y: number, level: number, building = false) {
     const n = BUILDINGS[type].size;
     const tier = level >= 7 ? 2 : level >= 4 ? 1 : 0;
     const g = building ? scaffold(n) : buildingModel(type, tier);
     g.position.set(x + n / 2, 0, y + n / 2);
     this.scene.add(g);
+    this.hookFire(g);
+    return g;
+  }
+
+  /** Lights any hearth fire and molten glow inside a building group. */
+  private hookFire(g: THREE.Object3D) {
+    g.updateMatrixWorld(true);
     // Fire: flickering flame cones, a warm point light and a glow sprite.
     const fire = g.getObjectByName('fire');
     if (fire) {
@@ -300,7 +365,6 @@ export class World3D {
     }
     const glow = g.getObjectByName('glow') as THREE.Mesh | undefined;
     if (glow) this.glows.push(glow);
-    return g;
   }
 
   // ------------------------------------------------------------------ people
@@ -326,6 +390,7 @@ export class World3D {
   private updateWalkers(dt: number) {
     for (const w of this.walkers) {
       w.person.update(dt);
+      if (w.fixed) continue;
       if (w.dest) {
         const d = w.dest.clone().sub(w.pos);
         const len = d.length();
@@ -386,8 +451,8 @@ export class World3D {
     const nightAmt = p > 0.7 ? Math.min(1, (p - 0.7) / 0.06) : p < 0.06 ? 1 - p / 0.06 : 0;
     for (const f of this.fires) {
       const flick = 0.85 + Math.sin(t * 13 + f.base.x) * 0.08 + Math.sin(t * 23) * 0.05;
-      f.light.intensity = (0.6 + nightAmt * 5) * flick;
-      f.glow.material.opacity = 0.35 + nightAmt * 0.5 * flick;
+      f.light.intensity = (0.05 + nightAmt * 5) * flick;
+      f.glow.material.opacity = 0.08 + nightAmt * 0.7 * flick;
       f.flames.forEach((m, i) => {
         m.scale.set(1 + Math.sin(t * 9 + i) * 0.08, flick + Math.sin(t * 11 + i * 2) * 0.12, 1 + Math.cos(t * 7 + i) * 0.08);
         m.rotation.y = t * (1 + i);
@@ -395,6 +460,43 @@ export class World3D {
     }
     void night;
     (this.water.material as THREE.MeshStandardMaterial).color.setHSL(0.56, 0.5, 0.42 + Math.sin(t * 0.8) * 0.01);
+  }
+
+  // ------------------------------------------------------------------ illustrated look
+
+  /** Swaps lit materials for 3-tone toon materials; outlines are drawn at render time. */
+  applyToon() {
+    const data = new Uint8Array([90, 90, 90, 255, 170, 170, 170, 255, 235, 235, 235, 255, 255, 255, 255, 255]);
+    const ramp = new THREE.DataTexture(data, 4, 1, THREE.RGBAFormat);
+    ramp.minFilter = ramp.magFilter = THREE.NearestFilter;
+    ramp.needsUpdate = true;
+    const swapped = new Map<string, THREE.Material>();
+    this.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || m === this.water) return;
+      const conv = (mat: THREE.Material) => {
+        const sm = mat as THREE.MeshStandardMaterial;
+        if (!sm.isMeshStandardMaterial) return mat;
+        if (!swapped.has(sm.uuid)) {
+          const t = new THREE.MeshToonMaterial({
+            color: sm.color,
+            map: sm.map,
+            gradientMap: ramp,
+            side: sm.side,
+            transparent: sm.transparent,
+            opacity: sm.opacity,
+            vertexColors: sm.vertexColors,
+            emissive: sm.emissive,
+            emissiveIntensity: sm.emissiveIntensity,
+          });
+          t.userData = { ...sm.userData };
+          swapped.set(sm.uuid, t);
+        }
+        return swapped.get(sm.uuid)!;
+      };
+      m.material = Array.isArray(m.material) ? m.material.map(conv) : conv(m.material);
+      if (m.userData.noOutline) (m.material as THREE.Material).userData.outlineParameters = { visible: false };
+    });
   }
 
   // ------------------------------------------------------------------ controls
@@ -458,7 +560,8 @@ export class World3D {
       this.updateLighting(t);
       this.updateWalkers(dt);
       for (const g of this.glows) (g.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.6 + Math.sin(t * 5) * 0.4;
-      this.renderer.render(this.scene, this.camera);
+      if (this.toon) this.outline.render(this.scene, this.camera);
+      else this.renderer.render(this.scene, this.camera);
     });
   }
 }

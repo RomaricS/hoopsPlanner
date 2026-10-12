@@ -8,8 +8,6 @@ import type { Outfit } from './three/people';
 import { World3D } from './three/world3d';
 import { newGame } from './sim/state';
 import * as eco from './sim/economy';
-import { BUILDINGS } from './data/buildings';
-const BUILDING_SIZE = (t: string) => BUILDINGS[t].size;
 
 const css = document.createElement('style');
 css.textContent = `
@@ -30,22 +28,19 @@ document.body.append(loading);
 async function main() {
   await loadAssets((f) => (loading.textContent = `Loading the savanna… ${Math.round(f * 100)}%`));
   const state = newGame(20261012);
-  // A small village, as a player would have it around Hearth level 3.
-  state.buildings[0].level = 3;
+  // A village as a player would have it around Hearth level 4.
+  state.buildings[0].level = 4;
   for (const k of Object.keys(state.res)) (state.res as Record<string, number>)[k] = 99999;
-  const order = ['hut', 'forager', 'hut', 'woodcutter', 'well', 'granary', 'watchtower', 'quarry', 'maize', 'griot', 'lodge', 'hut', 'hut', 'well', 'forager'];
+  const order = ['hut', 'forager', 'hut', 'woodcutter', 'well', 'granary', 'watchtower', 'quarry', 'maize', 'griot', 'lodge', 'hut', 'hut', 'well', 'forager', 'smelter', 'kraal', 'hut', 'hut', 'woodcutter', 'maize', 'watchtower', 'hut', 'hut'];
   for (const t of order) {
     eco.placeBuilding(state, t);
     for (const b of state.buildings) if (b.construct) b.construct.end = state.time;
     eco.tick(state, 0.01);
   }
-  // One building still under construction.
-  eco.placeBuilding(state, 'woodcutter');
 
   const world = new World3D(document.getElementById('view')!);
   world.buildTerrain(state);
   for (const n of state.nodes) world.addNode(n);
-  for (const b of state.buildings) world.addBuilding(b.type, b.x, b.y, b.level, !!b.construct && b.level === 0);
 
   const skins = ['#8d5524', '#a0673a', '#7a4a2a', '#9a6440', '#6e4226', '#b07850'];
   const wraps: [string, string][] = [
@@ -55,41 +50,35 @@ async function main() {
     ['#d9b36a', '#c23b22'],
     ['#5b4a8a', '#f0c33c'],
     ['#1f6b3a', '#e8b83a'],
+    ['#e2c044', '#8c2f39'],
   ];
-  const jobs: Record<string, { tool: Outfit['tool']; work: string }> = {
-    woodcutter: { tool: 'axe', work: 'Chopping' },
-    quarry: { tool: 'pick', work: 'Pickaxing' },
-    maize: { tool: 'hoe', work: 'Digging' },
-    forager: { tool: 'basket', work: 'Working_A' },
-    well: { tool: 'none', work: 'Working_B' },
-    lodge: { tool: 'spear', work: 'Melee_2H_Idle' },
-    griot: { tool: 'none', work: 'Cheering' },
-    hut: { tool: 'none', work: 'Waving' },
-  };
-  const h = state.buildings[0];
-  const center = new THREE.Vector3(h.x + 1, 0, h.y + 1);
-  for (let i = 0; i < 16; i++) {
-    const woman = i % 2 === 0;
+  let k = 0;
+  const villager = (tool?: string, guard = false): Outfit => {
+    const i = k++;
+    const woman = i % 2 === 0 && !guard;
     const [w1, w2] = wraps[i % wraps.length];
-    const b = state.buildings[(i % (state.buildings.length - 1)) + 1];
-    const job = jobs[b.type] ?? { tool: 'none', work: 'Interact' };
-    const atFire = i < 4;
-    const outfit: Outfit = {
+    if (guard) return { skin: skins[i % skins.length], wrap: '#e9dcc0', wrap2: '#3a2414', hair: 'plume', tool: 'spear', shield: true };
+    return {
       skin: skins[i % skins.length],
       wrap: w1,
       wrap2: w2,
       top: woman ? w2 : undefined,
       accent: woman ? w1 : undefined,
       hair: woman ? (i % 4 === 0 ? 'headwrap' : 'braids') : i % 3 === 0 ? 'bald' : 'short',
-      tool: atFire ? 'none' : job.tool,
+      tool: (tool as Outfit['tool']) ?? 'none',
     };
-    const n = BUILDING_SIZE(b.type);
-    const home = atFire ? center.clone().add(new THREE.Vector3(1.3, 0, 1.3)) : new THREE.Vector3(b.x + n / 2 + 0.55, 0, b.y + n / 2 + 0.55);
-    world.addWalker(outfit, home, atFire ? 1.6 : 0.7, atFire ? 'Sit_Floor_Idle' : job.work);
+  };
+  for (const b of state.buildings) world.addCompound(b.type, b.x, b.y, b.level, (_i, tool) => villager(tool, b.type === 'lodge'));
+
+  // People walking the roads between compounds.
+  const h = state.buildings[0];
+  const center = new THREE.Vector3(h.x + 1, 0, h.y + 1);
+  for (let i = 0; i < 14; i++) {
+    const road = (Math.floor(i / 2) - 3) * 3 + 2;
+    const home = i % 2 ? new THREE.Vector3(center.x + road + 0.5, 0, center.z + 0.5) : new THREE.Vector3(center.x + 0.5, 0, center.z + road + 0.5);
+    world.addWalker(villager(i % 3 === 0 ? 'basket' : undefined), home, 2.5, 'Waving');
   }
-  // A guard with a cowhide shield and the chief with a staff and cape.
-  world.addWalker({ skin: '#4a2a17', wrap: '#e9dcc0', wrap2: '#3a2414', hair: 'plume', tool: 'spear', shield: true }, center.clone().add(new THREE.Vector3(2.2, 0, 0.4)), 1.2, 'Melee_2H_Idle');
-  world.addWalker({ skin: '#5a321c', wrap: '#7a2e1a', wrap2: '#f0c33c', top: '#7a2e1a', accent: '#f0c33c', hair: 'crown', tool: 'staff', cape: '#c99a4e' }, center.clone().add(new THREE.Vector3(1.6, 0, 1.6)), 1.0, 'Idle_B');
+  world.applyToon();
   world.target.set(center.x + 1, 0, center.z + 1);
   world.setZoom(2);
 
